@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendario de Turnos - Cefem</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f8fc;
+      padding: 20px;
+      text-align: center;
+    }
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      margin-top: 20px;
+    }
+    .day {
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      min-height: 80px;
+      position: relative;
+      cursor: pointer;
+    }
+    .day.disabled {
+      background: #eaeaea;
+      color: #aaa;
+      pointer-events: none;
+    }
+    .day .fecha {
+      font-weight: bold;
+    }
+    .turno {
+      font-size: 12px;
+      background: #e0f7e9;
+      color: #007a3d;
+      padding: 3px;
+      border-radius: 3px;
+      margin-top: 5px;
+    }
+    .calendar-header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin: 0 auto 10px auto;
+    }
+    #mesActual {
+      font-size: 24px;
+      font-weight: bold;
+      padding: 0 20px;
+      min-width: 160px;
+    }
+    .formulario {
+      display: none;
+      margin: 30px auto;
+      max-width: 500px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    label, select, input[type="date"], button {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    button {
+      background: #004d99;
+      color: white;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+    }
+    .calendar-header button {
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+    .mensaje {
+      margin-top: 10px;
+      color: green;
+    }
+    .popup-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+    .popup {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+<div class="calendar-header">
+  <button onclick="cambiarMes(-1)">&lt;</button>
+  <h2 id="mesActual"></h2>
+  <button onclick="cambiarMes(1)">&gt;</button>
+</div>
+<div class="calendar" id="calendario"></div>
+
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup">
+    <h3 id="popupTitulo">Reservar turno</h3>
+    <label>Servicio:</label>
+    <select id="popupServicio">
+      <option value="Mantenimiento de aire">Mantenimiento de aire</option>
+      <option value="Instalación de aire">Instalación de aire</option>
+      <option value="Reparación de ventilador">Reparación de ventilador</option>
+      <option value="Asesoramiento técnico">Asesoramiento técnico</option>
+    </select>
+    <label>Hora:</label>
+    <select id="popupHora">
+      <option value="09:00">09:00</option>
+      <option value="10:00">10:00</option>
+      <option value="11:00">11:00</option>
+      <option value="14:00">14:00</option>
+      <option value="15:00">15:00</option>
+      <option value="16:00">16:00</option>
+    </select>
+    <button onclick="confirmarReserva()" id="btnConfirmar">Confirmar</button>
+    <button onclick="eliminarReserva()" id="btnEliminar" style="margin-top:10px; background: #c00; display:none;">Eliminar</button>
+    <button onclick="cerrarPopup()" style="margin-top:10px;background:#ccc;color:black;">Cancelar</button>
+    <div class="mensaje" id="mensajePopup"></div>
+  </div>
+</div>
+
+<script>
+  let hoy = new Date();
+  let mes = hoy.getMonth();
+  let anio = hoy.getFullYear();
+  const turnos = {};
+  let fechaSeleccionada = null;
+
+  function mostrarCalendario() {
+    const calendario = document.getElementById("calendario");
+    const mesActual = document.getElementById("mesActual");
+    calendario.innerHTML = "";
+    const primerDia = new Date(anio, mes, 1);
+    const ultimoDia = new Date(anio, mes + 1, 0);
+    const diaSemana = primerDia.getDay();
+    const opcionesFecha = { month: 'long', year: 'numeric' };
+    mesActual.textContent = primerDia.toLocaleString('es-ES', opcionesFecha).replace(' de ', ' ');
+
+    for (let i = 0; i < (diaSemana === 0 ? 6 : diaSemana - 1); i++) {
+      const vacio = document.createElement("div");
+      vacio.className = "day disabled";
+      calendario.appendChild(vacio);
+    }
+
+    for (let d = 1; d <= ultimoDia.getDate(); d++) {
+      const fechaActual = new Date(anio, mes, d);
+      const esDomingo = fechaActual.getDay() === 0;
+      const fechaStr = `${anio}-${(mes + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+      const dia = document.createElement("div");
+      dia.className = "day";
+      dia.innerHTML = `<div class="fecha">${d}</div>`;
+
+      if (turnos[fechaStr]) {
+        dia.innerHTML += `<div class="turno">${turnos[fechaStr].hora} - ${turnos[fechaStr].servicio}</div>`;
+      }
+      if (esDomingo) {
+        dia.classList.add("disabled");
+      } else {
+        dia.onclick = () => abrirPopup(fechaStr);
+      }
+
+      calendario.appendChild(dia);
+    }
+  }
+
+  function cambiarMes(direccion) {
+    mes += direccion;
+    if (mes < 0) {
+      mes = 11;
+      anio--;
+    } else if (mes > 11) {
+      mes = 0;
+      anio++;
+    }
+    mostrarCalendario();
+  }
+
+  function abrirPopup(fecha) {
+    fechaSeleccionada = fecha;
+    const popup = document.getElementById("popupOverlay");
+    const mensaje = document.getElementById("mensajePopup");
+    const titulo = document.getElementById("popupTitulo");
+    const btnEliminar = document.getElementById("btnEliminar");
+
+    mensaje.textContent = "";
+    if (turnos[fecha]) {
+      document.getElementById("popupServicio").value = turnos[fecha].servicio;
+      document.getElementById("popupHora").value = turnos[fecha].hora;
+      titulo.textContent = "Editar turno";
+      btnEliminar.style.display = "block";
+    } else {
+      titulo.textContent = "Reservar turno";
+      document.getElementById("popupServicio").value = "Mantenimiento de aire";
+      document.getElementById("popupHora").value = "09:00";
+      btnEliminar.style.display = "none";
+    }
+    popup.style.display = "flex";
+  }
+
+  function cerrarPopup() {
+    document.getElementById("popupOverlay").style.display = "none";
+  }
+
+  function confirmarReserva() {
+    const servicio = document.getElementById('popupServicio').value;
+    const hora = document.getElementById('popupHora').value;
+    if (!fechaSeleccionada) return;
+
+    const fechaObj = new Date(fechaSeleccionada);
+    if (fechaObj.getDay() === 0) {
+      alert("No se pueden reservar turnos los domingos");
+      return;
+    }
+
+    turnos[fechaSeleccionada] = { servicio, hora };
+    cerrarPopup();
+    mostrarCalendario();
+  }
+
+  function eliminarReserva() {
+    if (!fechaSeleccionada) return;
+    if (turnos[fechaSeleccionada]) {
+      if (confirm("¿Estás seguro de que deseas eliminar este turno?")) {
+        delete turnos[fechaSeleccionada];
+        cerrarPopup();
+        mostrarCalendario();
+      }
+    } else {
+      alert("No hay turno reservado en esta fecha.");
+    }
+  }
+
+  mostrarCalendario();
+</script>
+
+</body>
+</html>
